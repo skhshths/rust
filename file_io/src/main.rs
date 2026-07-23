@@ -14,7 +14,6 @@ fn input(prompt: String) -> String {
   x.trim().to_string()
 }
 
-
 fn main() -> Result<(), std::io::Error> {
   loop {
     let choice: String = input("read or write (r/w)? ".to_string());    
