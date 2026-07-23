@@ -34,6 +34,7 @@ fn main() -> Result<(), std::io::Error> {
       let mut writer = BufWriter::new(file);
 
       let line: String = input("what do you want to write to this file? ".to_string());
+      
       writeln!(writer, "{line}")?;
       writer.flush()?;
     } else {
