@@ -56,7 +56,7 @@ fn main() {
   let mut bank: i32 = 1000;
   let mut day: i32 = 1;
 
-  let stocks: Vec<String> = vec!["apple".to_string(), "nvidia".to_string(), "amd".to_string()];
+  let stocks: Vec<&str> = vec!["apple", "nvidia", "amd"];
   let mut prices: Vec<i32> = vec![100, 150, 200];
   let mut owned: Vec<i32> = vec![0, 0, 0];
   
