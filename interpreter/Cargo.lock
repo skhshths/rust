@@ -3,5 +3,14 @@
 version = 4
 
 [[package]]
+name = "cliutils"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8158e291a94d3e69c04107ea063253055162178522330e86d1ec6583d7e20741"
+
+[[package]]
 name = "interpreter"
 version = "0.1.0"
+dependencies = [
+ "cliutils",
+]

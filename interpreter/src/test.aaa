@@ -1,2 +1,3 @@
-print "hello world"
-print "line 2"
+i: string = input("what is your name? ")
+
+print i
