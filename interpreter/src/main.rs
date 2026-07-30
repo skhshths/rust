@@ -14,6 +14,19 @@ use cliutils::strip_all;
 use cliutils::string_to_vec;
 use cliutils::input;
 
+fn count(original: &str, target: &str) -> i32 {
+  original.matches(target).count().try_into().unwrap()
+}
+
+fn zip<T: Copy, V: Copy>(a: &[T], b: &[V]) -> Vec<(T, V)> {
+  let mut out: Vec<(T, V)> = Vec::new();
+  for (index, item) in a.iter().enumerate() {
+    let new: (T, V) = (*item, b[index]);
+    out.push(new);
+  }
+  out
+}
+
 fn main() {
     let path = Path::new("src/test.aaa");
     let mut file: File = File::open(&path).unwrap();
@@ -45,7 +58,6 @@ fn main() {
         }
         
       } else if first == "" {
-
       } else {
         let val: Vec<&str> = clean_split(line, ": ");
         let name: &str = val[0];
@@ -58,8 +70,43 @@ fn main() {
             let prompt: &str = clean_split(cleaned_val, "input(\"")[1].strip_suffix("\")").unwrap();
             let out: String = input(prompt);
             string_variables.insert(name, out);
-          } else {
+          } else {  
             string_variables.insert(name, cleaned_val.to_string());
+          }
+        } else if vartype == "stringcc" {
+          let cleaned_val: &str = strip_all(clean_split(line, " = ")[1], "\"");
+          
+          let left_bracket_count: i32 = count(cleaned_val, "{");
+          let right_bracket_count: i32 = count(cleaned_val, "}");
+          
+          let mut left_bracket_indexes: Vec<usize> = Vec::new();
+          let mut right_bracket_indexes: Vec<usize> = Vec::new();
+          
+          // left then right then left then right then ...
+          // loop through cleaned_val as a vec, keep indexes in seperate lists
+          // insert indexes into hashmaps
+          // split between correspodning indexes, swap out for variables
+          let characters: Vec<&str> = string_to_vec(cleaned_val);
+          for (index, item) in characters.iter().enumerate() {
+            if *item == "{" {
+              left_bracket_indexes.push(index);
+            } else if *item == "}" {
+              right_bracket_indexes.push(index);
+            }
+          }
+
+          for (left, right) in zip(&left_bracket_indexes, &right_bracket_indexes) {
+            let inside: Vec<&str> = characters[left + 1..right].to_vec();
+            let inside_with_brackets: Vec<&str> = characters[left..=right].to_vec();
+            let val: &str = &vec_to_string(&inside, "");
+            let final_value: String = string_variables.get(val).unwrap().to_string();
+            
+            let x = &vec_to_string(&inside_with_brackets, "");
+            let split_at_dec: Vec<&str> = clean_split(cleaned_val, x);
+
+            let new: String = vec_to_string(&vec![split_at_dec[0], &final_value, split_at_dec[1]], "");
+            
+            string_variables.insert(name, new);
           }
         }
       }
