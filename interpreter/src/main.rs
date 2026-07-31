@@ -36,12 +36,42 @@ fn zip<T: Copy, V: Copy>(a: &[T], b: &[V]) -> Vec<(T, V)> {
   out
 }
 
-fn parsei(val: &str) -> i32 {
+fn is_int(target: &str) -> bool {
+  let target_chars: Vec<&str> = string_to_vec(target);
+
+  for item in target_chars {
+    if !"1234567890".contains(item) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+fn parsei(val: &str, int_variables: &HashMap<&str, i32>) -> i32 {
   let cleaned_val: Vec<&str> = clean_split(val, " ");
           
-  let a: i32 = cleaned_val[0].parse::<i32>().unwrap();
+  let a_init: &str = cleaned_val[0];
   let op: &str = cleaned_val[1];
-  let b: i32 = cleaned_val[2].parse::<i32>().unwrap();
+  let b_init: &str = cleaned_val[2];
+
+  let mut a: i32 = -1;
+  let mut b: i32 = -1;
+  if int_variables.contains_key(a_init) {
+    a = int_variables[a_init];
+  }
+
+  if int_variables.contains_key(b_init) {
+    b = int_variables[b_init];
+  }
+
+  if is_int(a_init) {
+    a = a_init.parse::<i32>().unwrap();
+  }
+
+  if is_int(b_init) {
+    b = b_init.parse::<i32>().unwrap();
+  }
 
   
   match op {
@@ -136,7 +166,14 @@ fn main() {
             let inside: Vec<&str> = characters[left + 1..right].to_vec();
             let inside_with_brackets: Vec<&str> = characters[left..=right].to_vec();
             let val: &str = &vec_to_string(&inside, "");
-            let final_value: &str = &string_variables[val];
+
+            let final_value;
+
+            if string_variables.contains_key(val) {
+              final_value = string_variables.get(val).unwrap().to_string();
+            } else {
+              final_value = int_variables[val].to_string();
+            }
             
             let x = &vec_to_string(&inside_with_brackets, "");
             let split_at_dec: Vec<&str> = clean_split(cleaned_val, x);
@@ -148,7 +185,7 @@ fn main() {
           let cleaned_val: i32 = val.parse::<i32>().unwrap();
           int_variables.insert(name, cleaned_val);
         } else if vartype == "iparse" {
-          let out: i32 = parsei(val);
+          let out: i32 = parsei(val, &int_variables);
 
           int_variables.insert(name, out);
         }

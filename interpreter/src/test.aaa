@@ -1,3 +1,9 @@
-x: 
+a: int = 1
+b: iparse = a + 1
+c: iparse = b + 1
+d: iparse = c + b
 
-print x
+print a
+print b
+print c
+print d
