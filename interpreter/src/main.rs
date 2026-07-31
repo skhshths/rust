@@ -1,6 +1,8 @@
 #![allow(dead_code, unused_imports, unused_variables)]
 
 use std::io::Read;
+use std::io;
+use std::io::Write;
 
 use std::collections::HashMap;
 
@@ -12,7 +14,14 @@ use cliutils::clean_split;
 use cliutils::vec_to_string;
 use cliutils::strip_all;
 use cliutils::string_to_vec;
-use cliutils::input;
+
+fn input(prompt: &str) -> String {
+  print!("{prompt}");
+  io::stdout().flush().unwrap();
+  let mut x: String = String::new();
+  io::stdin().read_line(&mut x).unwrap();
+  x.trim().to_string()
+}
 
 fn count(original: &str, target: &str) -> i32 {
   original.matches(target).count().try_into().unwrap()
@@ -27,11 +36,29 @@ fn zip<T: Copy, V: Copy>(a: &[T], b: &[V]) -> Vec<(T, V)> {
   out
 }
 
+fn parsei(val: &str) -> i32 {
+  let cleaned_val: Vec<&str> = clean_split(val, " ");
+          
+  let a: i32 = cleaned_val[0].parse::<i32>().unwrap();
+  let op: &str = cleaned_val[1];
+  let b: i32 = cleaned_val[2].parse::<i32>().unwrap();
+
+  
+  match op {
+    "+" => a + b,
+    "-" => a - b,
+    "/" => a / b,
+    "*" => a * b,
+    _ => 0
+  }
+}
+
 fn main() {
     let path = Path::new("src/test.aaa");
     let mut file: File = File::open(&path).unwrap();
 
     let mut string_variables: HashMap<&str, String> = HashMap::new();
+    let mut int_variables: HashMap<&str, i32> = HashMap::new();
 
     let mut content = String::new();
 
@@ -54,10 +81,20 @@ fn main() {
           if string_variables.contains_key(message) {
             let out: &str = &string_variables[message];
             println!("{out}");
+          } else if int_variables.contains_key(message) {
+            let out: i32 = int_variables[message];
+            println!("{out}");
           }
         }
-        
       } else if first == "" {
+      } else if first == "strshow" {
+        let varname: &str = clean_split(line, " ")[1];
+        let varval: &str = &string_variables[varname];
+        println!("{varname}: {varval}");
+      } else if first == "intshow" {
+        let varname: &str = clean_split(line, " ")[1];
+        let varval: &i32 = &int_variables[varname];
+        println!("{varname}: {varval}");
       } else {
         let val: Vec<&str> = clean_split(line, ": ");
         let name: &str = val[0];
@@ -99,15 +136,21 @@ fn main() {
             let inside: Vec<&str> = characters[left + 1..right].to_vec();
             let inside_with_brackets: Vec<&str> = characters[left..=right].to_vec();
             let val: &str = &vec_to_string(&inside, "");
-            let final_value: String = string_variables.get(val).unwrap().to_string();
+            let final_value: &str = &string_variables[val];
             
             let x = &vec_to_string(&inside_with_brackets, "");
             let split_at_dec: Vec<&str> = clean_split(cleaned_val, x);
 
-            let new: String = vec_to_string(&vec![split_at_dec[0], &final_value, split_at_dec[1]], "");
-            
-            string_variables.insert(name, new);
+            let new: &str = &vec_to_string(&vec![split_at_dec[0], &final_value, split_at_dec[1]], "");
+            string_variables.insert(name, new.to_string());
           }
+        } else if vartype == "int" {
+          let cleaned_val: i32 = val.parse::<i32>().unwrap();
+          int_variables.insert(name, cleaned_val);
+        } else if vartype == "iparse" {
+          let out: i32 = parsei(val);
+
+          int_variables.insert(name, out);
         }
       }
     }
