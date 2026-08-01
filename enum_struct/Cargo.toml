@@ -1,0 +1,7 @@
+[package]
+name = "enum_struct"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cliutils = "0.2.4"
