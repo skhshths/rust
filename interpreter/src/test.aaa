@@ -1,9 +1,5 @@
-a: int = 1
-b: iparse = a + 1
-c: iparse = b + 1
-d: iparse = c + b
+add_one: uop (a) -> int = a + 1
 
-print a
-print b
-print c
-print d
+x: int = add_one(5)
+
+print x
