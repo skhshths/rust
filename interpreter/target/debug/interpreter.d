@@ -1,1 +1,1 @@
-/home/oliverbarnet/Code/rust/interpreter/target/debug/interpreter: /home/oliverbarnet/Code/rust/interpreter/src/dih.rs /home/oliverbarnet/Code/rust/interpreter/src/main.rs
+C:\Users\Student\Desktop\OliverB\rust\rust\interpreter\target\debug\interpreter.exe: C:\Users\Student\Desktop\OliverB\rust\rust\interpreter\src\dih.rs C:\Users\Student\Desktop\OliverB\rust\rust\interpreter\src\main.rs

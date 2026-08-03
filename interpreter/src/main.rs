@@ -13,6 +13,7 @@ use cliutils::clean_split;
 use cliutils::string_to_vec;
 use cliutils::strip_all;
 use cliutils::vec_to_string;
+
 use std::fmt::Display;
 use std::fs::File;
 use std::path::Path;
@@ -87,7 +88,8 @@ fn main() {
 
     let mut string_variables: HashMap<&str, String> = HashMap::new();
     let mut int_variables: HashMap<&str, i32> = HashMap::new();
-    let mut uops: HashMap<&str, (Vec<&str>, &str)> = HashMap::new();
+    let mut unops: HashMap<&str, (Vec<&str>, &str, &str)> = HashMap::new();
+    let mut biops: HashMap<&str, (Vec<&str>, &str, &str)> = HashMap::new();
 
     let mut content = String::new();
 
@@ -134,6 +136,8 @@ fn main() {
             let varname: &str = clean_split(line, " ")[1];
             let varval: &i32 = &int_variables[varname];
             println!("{varname}: {varval}");
+        } else if first == ";" {
+            continue;
         } else {
             let val: Vec<&str> = clean_split(line, ": ");
             let name: &str = val[0];
@@ -195,18 +199,70 @@ fn main() {
             } else if vartype == "int" {
                 if val.contains("(") {
                     let opname: &str = clean_split(val, "(")[0];
-                    if uops.contains_key(opname) {
-                        let args: Vec<&str> = uops[opname].0.clone();
-                        let ret_type: &str = uops[opname].1;
-                        let mut inputted: Vec<&str> = clean_split(val, "(");
-                        // here
-                        println!("{inputted:?}")
+                    if unops.contains_key(opname) {
+                        let args: Vec<&str> = unops[opname].0.clone();
+                        let ret_type: &str = unops[opname].1;
+                        let mut function: Vec<&str> = unops[opname].2.split(" ").collect();
+                        let inputted: Vec<&str> = clean_split(val, "(")[1]
+                            .strip_suffix(")")
+                            .expect("inputted arguments should end in ')'").split(", ")
+                            .collect();
+                        let inputted_len: usize = inputted.len();
+                        let target_size: usize = args.len();
+                        let is_correct_args: bool = inputted.len() == args.len();
+
+                        if is_correct_args {
+                            let inputted_ints: Vec<i32> = inputted.iter().map(|x| x.parse::<i32>().unwrap()).collect();
+                            for index in 0..function.len() {
+                                let item: &str = function[index];
+                                if args.contains(&item) {
+                                    let args_index: usize = args.iter().position(|x| *x == item).expect("value ({item}) not found");
+                                    let val: i32 = inputted_ints[args_index];
+                                    function[index] = inputted[args_index];
+
+                                    let x: i32 = parsei(&vec_to_string(&function, " "), &int_variables);
+
+                                    int_variables.insert(name, x);
+                                }
+                            }
+                        } else {    
+                            panic!("arguments inputted not correct length");
+                        }
+                    } else if biops.contains_key(opname) {
+                        let args: Vec<&str> = biops[opname].0.clone();
+                        let ret_type: &str = biops[opname].1;
+                        let mut function: Vec<&str> = biops[opname].2.split(" ").collect();
+                        let inputted: Vec<&str> = clean_split(val, "(")[1]
+                            .strip_suffix(")")
+                            .expect("inputted arguments should end in ')'").split(", ")
+                            .collect();
+                        let inputted_len: usize = inputted.len();
+                        let target_size: usize = args.len();
+                        let is_correct_args: bool = inputted.len() == args.len();
+
+                        if is_correct_args {
+                            let inputted_ints: Vec<i32> = inputted.iter().map(|x| x.parse::<i32>().unwrap()).collect();
+                            for index in 0..function.len() {
+                                let item: &str = function[index];
+                                if args.contains(&item) {
+                                    let args_index: usize = args.iter().position(|x| *x == item).expect("value ({item}) not found");
+                                    let val: i32 = inputted_ints[args_index];
+                                    function[index] = inputted[args_index];
+                                }
+                            }
+                            let x: i32 = parsei(&vec_to_string(&function, " "), &int_variables);
+
+                            int_variables.insert(name, x);
+                        } else {    
+                            panic!("arguments inputted not correct length");
+                        }
                     }
-                }
-                let cleaned_val: i32 = val
+                } else {
+                    let cleaned_val: i32 = val
                     .parse::<i32>()
                     .expect("should be a valid signed integer");
-                int_variables.insert(name, cleaned_val);
+                    int_variables.insert(name, cleaned_val);
+                }
             } else if vartype == "iparse" {
                 let out: i32 = parsei(val, &int_variables);
 
@@ -221,8 +277,11 @@ fn main() {
                         ", ",
                     );
                     let ret_type: &str = clean_split(vartype, " -> ")[1];
-                    if op_type == "uop" {
-                        uops.insert(name, (args, ret_type));
+                    
+                    if op_type == "unop" {
+                        unops.insert(name, (args, ret_type, val));
+                    } else if op_type == "biop" {
+                        biops.insert(name, (args.clone(), ret_type, val));
                     }
                 }
             }

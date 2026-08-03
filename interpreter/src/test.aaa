@@ -1,4 +1,5 @@
-add_one: uop (a) -> int = a + 1
+x: int = 5
+add_one: unop (b) -> int = b + x
 
 x: int = add_one(5)
 
