@@ -3,6 +3,7 @@
 
 mod dih;
 
+use std::borrow::Cow;
 use std::io;
 use std::io::Read;
 use std::io::Write;
@@ -41,37 +42,81 @@ fn zip<T: Copy, V: Copy>(a: &[T], b: &[V]) -> Vec<(T, V)> {
     out
 }
 
-fn parsei(val: &str, int_variables: &HashMap<&str, i32>) -> i32 {
-    let cleaned_val: Vec<&str> = clean_split(val, " ");
+type BiopDefinition<'a> = (Vec<&'a str>, &'a str, &'a str);
 
-    let a_init: &str = cleaned_val[0];
-    let op: &str = cleaned_val[1];
-    let b_init: &str = cleaned_val[2];
+enum IntExpression {
+    Value(i32),
+    SubExpr(String),
+    Variable(String),
+}
 
-    let mut a = None;
-    let mut b = None;
-    if int_variables.contains_key(a_init) {
-        a = Some(int_variables[a_init]);
+fn read_int_expr(expr: &mut &str) -> IntExpression {
+    *expr = expr.trim_start();
+
+    if expr.starts_with('(') {
+        *expr = &expr[1..];
+        let mut paren_count = 1;
+        let mut content = String::new();
+
+        while let Some(char) = expr.chars().next() {
+            if char == '(' {
+                paren_count += 1;
+            }
+
+            if char == ')' {
+                paren_count -= 1;
+
+                if paren_count == 0 {
+                    break;
+                }
+            }
+
+            content.push(char);
+            *expr = &expr[1..];
+        }
+        IntExpression::SubExpr(content)
+    } else {
+        let Some(word) = expr.split_whitespace().next() else {
+            panic!("unexpected EOS");
+        };
+
+        *expr = &expr[word.len()..];
+
+        if let Ok(int) = word.parse::<i32>() {
+            IntExpression::Value(int)
+        } else {
+            IntExpression::Variable(word.to_string())
+        }
     }
+}
 
-    if int_variables.contains_key(b_init) {
-        b = Some(int_variables[b_init]);
-    }
+fn parsei(
+    mut val: &str,
+    int_variables: &HashMap<&str, i32>,
+    biops: &HashMap<&str, BiopDefinition>,
+) -> i32 {
+    let left_expr = read_int_expr(&mut val);
 
-    if let Ok(val) = a_init.parse::<i32>() {
-        a = Some(val);
-    }
+    val = val.trim_start();
+    let Some(op) = val.split_whitespace().next() else {
+        panic!("unexpected EOS");
+    };
+    val = &val[op.len()..];
 
-    if let Ok(val) = b_init.parse::<i32>() {
-        b = Some(val);
-    }
+    let right_expr = read_int_expr(&mut val);
 
-    let Some(a) = a else {
-        panic!("{a_init} is neither an integer nor a variable");
+    let a = match left_expr {
+        IntExpression::SubExpr(sub) => parsei(&sub, int_variables, biops),
+        IntExpression::Value(int) => int,
+        IntExpression::Variable(var) => *int_variables.get(var.as_str()).expect("asdf"),
+        // here
     };
 
-    let Some(b) = b else {
-        panic!("{b_init} is neither an integer nor a variable")
+    let b = match right_expr {
+        IntExpression::SubExpr(sub) => parsei(&sub, int_variables, biops),
+        IntExpression::Value(int) => int,
+        IntExpression::Variable(var) => *int_variables.get(var.as_str()).expect("asdf"),
+        // here
     };
 
     match op {
@@ -79,7 +124,24 @@ fn parsei(val: &str, int_variables: &HashMap<&str, i32>) -> i32 {
         "-" => a - b,
         "/" => a / b,
         "*" => a * b,
-        op => panic!("{op} not valid operation"),
+        op => {
+            if let Some(biop) = biops.get(op) {
+                let args: &[&str] = &biop.0;
+                let ret_type: &str = biop.1;
+                let mut function: Vec<Cow<str>> =
+                    biop.2.split_whitespace().map(Cow::Borrowed).collect();
+                let inputted_ints: [i32; 2] = [a, b];
+                for (index, item) in function.iter_mut().enumerate() {
+                    if let Some(args_index) = args.iter().position(|x| *x == item) {
+                        let val: i32 = inputted_ints[args_index];
+                        *item = Cow::Owned(inputted_ints[args_index].to_string());
+                    }
+                }
+                parsei(&vec_to_string(&function, " "), int_variables, biops)
+            } else {
+                panic!("unknown operator {op}");
+            }
+        }
     }
 }
 
@@ -88,8 +150,7 @@ fn main() {
 
     let mut string_variables: HashMap<&str, String> = HashMap::new();
     let mut int_variables: HashMap<&str, i32> = HashMap::new();
-    let mut unops: HashMap<&str, (Vec<&str>, &str, &str)> = HashMap::new();
-    let mut biops: HashMap<&str, (Vec<&str>, &str, &str)> = HashMap::new();
+    let mut biops: HashMap<&str, BiopDefinition> = HashMap::new();
 
     let mut content = String::new();
 
@@ -197,74 +258,12 @@ fn main() {
                     string_variables.insert(name, new.to_string());
                 }
             } else if vartype == "int" {
-                if val.contains("(") {
-                    let opname: &str = clean_split(val, "(")[0];
-                    if unops.contains_key(opname) {
-                        let args: Vec<&str> = unops[opname].0.clone();
-                        let ret_type: &str = unops[opname].1;
-                        let mut function: Vec<&str> = unops[opname].2.split(" ").collect();
-                        let inputted: Vec<&str> = clean_split(val, "(")[1]
-                            .strip_suffix(")")
-                            .expect("inputted arguments should end in ')'").split(", ")
-                            .collect();
-                        let inputted_len: usize = inputted.len();
-                        let target_size: usize = args.len();
-                        let is_correct_args: bool = inputted.len() == args.len();
-
-                        if is_correct_args {
-                            let inputted_ints: Vec<i32> = inputted.iter().map(|x| x.parse::<i32>().unwrap()).collect();
-                            for index in 0..function.len() {
-                                let item: &str = function[index];
-                                if args.contains(&item) {
-                                    let args_index: usize = args.iter().position(|x| *x == item).expect("value ({item}) not found");
-                                    let val: i32 = inputted_ints[args_index];
-                                    function[index] = inputted[args_index];
-
-                                    let x: i32 = parsei(&vec_to_string(&function, " "), &int_variables);
-
-                                    int_variables.insert(name, x);
-                                }
-                            }
-                        } else {    
-                            panic!("arguments inputted not correct length");
-                        }
-                    } else if biops.contains_key(opname) {
-                        let args: Vec<&str> = biops[opname].0.clone();
-                        let ret_type: &str = biops[opname].1;
-                        let mut function: Vec<&str> = biops[opname].2.split(" ").collect();
-                        let inputted: Vec<&str> = clean_split(val, "(")[1]
-                            .strip_suffix(")")
-                            .expect("inputted arguments should end in ')'").split(", ")
-                            .collect();
-                        let inputted_len: usize = inputted.len();
-                        let target_size: usize = args.len();
-                        let is_correct_args: bool = inputted.len() == args.len();
-
-                        if is_correct_args {
-                            let inputted_ints: Vec<i32> = inputted.iter().map(|x| x.parse::<i32>().unwrap()).collect();
-                            for index in 0..function.len() {
-                                let item: &str = function[index];
-                                if args.contains(&item) {
-                                    let args_index: usize = args.iter().position(|x| *x == item).expect("value ({item}) not found");
-                                    let val: i32 = inputted_ints[args_index];
-                                    function[index] = inputted[args_index];
-                                }
-                            }
-                            let x: i32 = parsei(&vec_to_string(&function, " "), &int_variables);
-
-                            int_variables.insert(name, x);
-                        } else {    
-                            panic!("arguments inputted not correct length");
-                        }
-                    }
-                } else {
-                    let cleaned_val: i32 = val
+                let cleaned_val: i32 = val
                     .parse::<i32>()
                     .expect("should be a valid signed integer");
-                    int_variables.insert(name, cleaned_val);
-                }
+                int_variables.insert(name, cleaned_val);
             } else if vartype == "iparse" {
-                let out: i32 = parsei(val, &int_variables);
+                let out: i32 = parsei(val, &int_variables, &biops);
 
                 int_variables.insert(name, out);
             } else {
@@ -277,10 +276,8 @@ fn main() {
                         ", ",
                     );
                     let ret_type: &str = clean_split(vartype, " -> ")[1];
-                    
-                    if op_type == "unop" {
-                        unops.insert(name, (args, ret_type, val));
-                    } else if op_type == "biop" {
+
+                    if op_type == "biop" {
                         biops.insert(name, (args.clone(), ret_type, val));
                     }
                 }

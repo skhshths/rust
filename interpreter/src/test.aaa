@@ -1,6 +1,5 @@
-x: int = 5
-add_one: unop (b) -> int = b + x
+add: biop (a, b) -> int = a + b
 
-x: int = add_one(5)
+x: iparse = ((1 add 1) add 1) add (1 add 1)
 
 print x
