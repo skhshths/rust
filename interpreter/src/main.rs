@@ -42,12 +42,15 @@ fn zip<T: Copy, V: Copy>(a: &[T], b: &[V]) -> Vec<(T, V)> {
     out
 }
 
-type BiopDefinition<'a> = (Vec<&'a str>, &'a str, &'a str);
+// (arguments_expected, func_raw)
+type OpDefinition<'a> = (Vec<&'a str>, &'a str);
 
+#[derive(Debug)]
 enum IntExpression {
     Value(i32),
     SubExpr(String),
     Variable(String),
+    Buffer(String),
 }
 
 fn read_int_expr(expr: &mut &str) -> IntExpression {
@@ -67,6 +70,7 @@ fn read_int_expr(expr: &mut &str) -> IntExpression {
                 paren_count -= 1;
 
                 if paren_count == 0 {
+                    *expr = &expr[1..]; 
                     break;
                 }
             }
@@ -76,24 +80,32 @@ fn read_int_expr(expr: &mut &str) -> IntExpression {
         }
         IntExpression::SubExpr(content)
     } else {
-        let Some(word) = expr.split_whitespace().next() else {
-            panic!("unexpected EOS");
-        };
+        if expr.is_empty() {
+            IntExpression::Buffer("hi".to_string())
 
-        *expr = &expr[word.len()..];
-
-        if let Ok(int) = word.parse::<i32>() {
-            IntExpression::Value(int)
         } else {
-            IntExpression::Variable(word.to_string())
+            let Some(word) = expr.split_whitespace().next() else {
+                panic!("unexpected end of interpreted int (iint)");
+            };
+
+            *expr = &expr[word.len()..];
+
+            if let Ok(int) = word.parse::<i32>() {
+                IntExpression::Value(int)
+            } else {
+                IntExpression::Variable(word.to_string())
+            }
         }
+
+        
     }
 }
 
 fn parsei(
     mut val: &str,
     int_variables: &HashMap<&str, i32>,
-    biops: &HashMap<&str, BiopDefinition>,
+    biops: &HashMap<&str, OpDefinition>,
+    unops: &HashMap<&str, OpDefinition>,
 ) -> i32 {
     let left_expr = read_int_expr(&mut val);
 
@@ -103,20 +115,38 @@ fn parsei(
     };
     val = &val[op.len()..];
 
+    println!("val: {val}");
+
     let right_expr = read_int_expr(&mut val);
 
+    println!("{left_expr:?}");
+
     let a = match left_expr {
-        IntExpression::SubExpr(sub) => parsei(&sub, int_variables, biops),
+        IntExpression::SubExpr(sub) => parsei(&sub, int_variables, biops, unops),
         IntExpression::Value(int) => int,
-        IntExpression::Variable(var) => *int_variables.get(var.as_str()).expect("asdf"),
-        // here
+        IntExpression::Variable(var) => {
+            if unops.contains_key(var.as_str()) {
+                println!("x: {var}");
+                3
+            } else {
+                println!("x: {var}");
+                *int_variables.get(var.as_str()).expect("left-hand side argument unexpected")
+            }
+        },
+        IntExpression::Buffer(word) => {
+            println!("hello world! {word}");
+            3
+        }
     };
 
     let b = match right_expr {
-        IntExpression::SubExpr(sub) => parsei(&sub, int_variables, biops),
+        IntExpression::SubExpr(sub) => parsei(&sub, int_variables, biops, unops),
         IntExpression::Value(int) => int,
-        IntExpression::Variable(var) => *int_variables.get(var.as_str()).expect("asdf"),
-        // here
+        IntExpression::Variable(var) => *int_variables.get(var.as_str()).expect("right-hand side argument unexpected"),
+        IntExpression::Buffer(word) => {
+            println!("hello wolrd");
+            3
+        }
     };
 
     match op {
@@ -127,9 +157,8 @@ fn parsei(
         op => {
             if let Some(biop) = biops.get(op) {
                 let args: &[&str] = &biop.0;
-                let ret_type: &str = biop.1;
                 let mut function: Vec<Cow<str>> =
-                    biop.2.split_whitespace().map(Cow::Borrowed).collect();
+                    biop.1.split_whitespace().map(Cow::Borrowed).collect();
                 let inputted_ints: [i32; 2] = [a, b];
                 for (index, item) in function.iter_mut().enumerate() {
                     if let Some(args_index) = args.iter().position(|x| *x == item) {
@@ -137,7 +166,7 @@ fn parsei(
                         *item = Cow::Owned(inputted_ints[args_index].to_string());
                     }
                 }
-                parsei(&vec_to_string(&function, " "), int_variables, biops)
+                parsei(&vec_to_string(&function, " "), int_variables, biops, unops)
             } else {
                 panic!("unknown operator {op}");
             }
@@ -150,7 +179,8 @@ fn main() {
 
     let mut string_variables: HashMap<&str, String> = HashMap::new();
     let mut int_variables: HashMap<&str, i32> = HashMap::new();
-    let mut biops: HashMap<&str, BiopDefinition> = HashMap::new();
+    let mut biops: HashMap<&str, OpDefinition> = HashMap::new();
+    let mut unops: HashMap<&str, OpDefinition> = HashMap::new();
 
     let mut content = String::new();
 
@@ -258,16 +288,15 @@ fn main() {
                     string_variables.insert(name, new.to_string());
                 }
             } else if vartype == "int" {
-                let cleaned_val: i32 = val
-                    .parse::<i32>()
-                    .expect("should be a valid signed integer");
-                int_variables.insert(name, cleaned_val);
-            } else if vartype == "iparse" {
-                let out: i32 = parsei(val, &int_variables, &biops);
+                if let Ok(cleaned_val) = val.parse::<i32>() {
+                   panic!("variable of type int must be iparse, not raw integer");
+                } else {
+                    let out: i32 = parsei(val, &int_variables, &biops, &unops);
 
-                int_variables.insert(name, out);
+                    int_variables.insert(name, out);
+                }
             } else {
-                if vartype.contains("->") {
+                if vartype.contains("biop") {
                     let op_type: &str = clean_split(clean_split(vartype, " -> ")[0], " ")[0];
                     let args: Vec<&str> = clean_split(
                         clean_split(clean_split(vartype, " -> ")[0], "(")[1]
@@ -275,10 +304,11 @@ fn main() {
                             .expect("arguments must end in ')'"),
                         ", ",
                     );
-                    let ret_type: &str = clean_split(vartype, " -> ")[1];
 
                     if op_type == "biop" {
-                        biops.insert(name, (args.clone(), ret_type, val));
+                        biops.insert(name, (args.clone(), val));
+                    } else if op_type == "unop" {
+                        unops.insert(name, (args.clone(), val));
                     }
                 }
             }

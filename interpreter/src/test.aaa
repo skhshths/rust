@@ -1,5 +1,5 @@
-add: biop (a, b) -> int = a + b
+negate: unop (x) = (1 - 1) - x
 
-x: iparse = ((1 add 1) add 1) add (1 add 1)
+x: int = negate 1
 
 print x
