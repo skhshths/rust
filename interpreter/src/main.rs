@@ -45,15 +45,20 @@ fn zip<T: Copy, V: Copy>(a: &[T], b: &[V]) -> Vec<(T, V)> {
 // (arguments_expected, func_raw)
 type OpDefinition<'a> = (Vec<&'a str>, &'a str);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum IntExpression {
     Value(i32),
     SubExpr(String),
     Variable(String),
-    Buffer(String),
 }
 
-fn read_int_expr(expr: &mut &str) -> IntExpression {
+#[derive(Debug, Clone)]
+enum IntExprResult {
+    Valid(IntExpression),
+    Invalid,
+}
+
+fn read_int_expr(expr: &mut &str) -> IntExprResult {
     *expr = expr.trim_start();
 
     if expr.starts_with('(') {
@@ -78,12 +83,9 @@ fn read_int_expr(expr: &mut &str) -> IntExpression {
             content.push(char);
             *expr = &expr[1..];
         }
-        IntExpression::SubExpr(content)
+        IntExprResult::Valid(IntExpression::SubExpr(content))
     } else {
-        if expr.is_empty() {
-            IntExpression::Buffer("hi".to_string())
-
-        } else {
+        if !expr.is_empty() {
             let Some(word) = expr.split_whitespace().next() else {
                 panic!("unexpected end of interpreted int (iint)");
             };
@@ -91,10 +93,12 @@ fn read_int_expr(expr: &mut &str) -> IntExpression {
             *expr = &expr[word.len()..];
 
             if let Ok(int) = word.parse::<i32>() {
-                IntExpression::Value(int)
+                IntExprResult::Valid(IntExpression::Value(int))
             } else {
-                IntExpression::Variable(word.to_string())
+                IntExprResult::Valid(IntExpression::Variable(word.to_string()))
             }
+        } else {
+            IntExprResult::Invalid
         }
 
         
@@ -108,6 +112,7 @@ fn parsei(
     unops: &HashMap<&str, OpDefinition>,
 ) -> i32 {
     let left_expr = read_int_expr(&mut val);
+    let og_left_expr = left_expr.clone();
 
     val = val.trim_start();
     let Some(op) = val.split_whitespace().next() else {
@@ -118,34 +123,36 @@ fn parsei(
     println!("val: {val}");
 
     let right_expr = read_int_expr(&mut val);
+    let og_right_expr = right_expr.clone();
 
     println!("{left_expr:?}");
 
     let a = match left_expr {
-        IntExpression::SubExpr(sub) => parsei(&sub, int_variables, biops, unops),
-        IntExpression::Value(int) => int,
-        IntExpression::Variable(var) => {
-            if unops.contains_key(var.as_str()) {
-                println!("x: {var}");
+        IntExprResult::Valid(IntExpression::SubExpr(sub)) => parsei(&sub, int_variables, biops, unops),
+        IntExprResult::Valid(IntExpression::Value(int)) => int,
+        IntExprResult::Valid(IntExpression::Variable(var)) => match int_variables.get(var.as_str()) {
+            Some(x) => {
+                println!("dfasdf: {x}");
                 3
-            } else {
-                println!("x: {var}");
-                *int_variables.get(var.as_str()).expect("left-hand side argument unexpected")
-            }
+            },
+            None => {
+                let varname = var.as_str();
+                if unops.contains_key(varname) {
+                    println!("is a unop!"); 
+                }
+                3
+            },
         },
-        IntExpression::Buffer(word) => {
-            println!("hello world! {word}");
-            3
-        }
+        IntExprResult::Invalid => todo!()
     };
 
     let b = match right_expr {
-        IntExpression::SubExpr(sub) => parsei(&sub, int_variables, biops, unops),
-        IntExpression::Value(int) => int,
-        IntExpression::Variable(var) => *int_variables.get(var.as_str()).expect("right-hand side argument unexpected"),
-        IntExpression::Buffer(word) => {
-            println!("hello wolrd");
-            3
+        IntExprResult::Valid(IntExpression::SubExpr(sub)) => parsei(&sub, int_variables, biops, unops),
+        IntExprResult::Valid(IntExpression::Value(int)) => int,
+        IntExprResult::Valid(IntExpression::Variable(var)) => *int_variables.get(var.as_str()).expect("right-hand side argument unexpected"),
+        IntExprResult::Invalid => {
+            println!("hi, {val:?}");
+            todo!()
         }
     };
 
@@ -168,7 +175,7 @@ fn parsei(
                 }
                 parsei(&vec_to_string(&function, " "), int_variables, biops, unops)
             } else {
-                panic!("unknown operator {op}");
+                panic!("what? {og_left_expr:?}, {b}");
             }
         }
     }
