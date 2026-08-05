@@ -1,5 +1,9 @@
-negate: unop (x) = (1 - 1) - x
+add: biop (a, b) -> int = a + b
 
+<<<<<<< HEAD
 x: int = (negate 1) + (1 + 1)
+=======
+x: iparse = ((1 add 1) add 1) add (1 add 1)
+>>>>>>> parent of dcf933a (interpreter)
 
 print x
