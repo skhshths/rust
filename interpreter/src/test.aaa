@@ -1,5 +1,5 @@
 negate: unop (x) = (1 - 1) - x
 
-x: int = negate 1
+x: int = (negate 1) + (1 + 1)
 
 print x

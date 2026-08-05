@@ -45,16 +45,13 @@ fn zip<T: Copy, V: Copy>(a: &[T], b: &[V]) -> Vec<(T, V)> {
 // (arguments_expected, func_raw)
 type OpDefinition<'a> = (Vec<&'a str>, &'a str);
 
-#[derive(Debug)]
-enum IntExpression {
-    Value(i32),
-    SubExpr(String),
-    Variable(String),
-    Buffer(String),
+enum Word<'a> {
+    Simple(&'a str),
+    Paren(String),
 }
 
-fn read_int_expr(expr: &mut &str) -> IntExpression {
-    *expr = expr.trim_start();
+fn read_word<'a>(expr: &mut &'a str) -> Option<Word<'a>> {
+    *expr = expr.trim();
 
     if expr.starts_with('(') {
         *expr = &expr[1..];
@@ -70,7 +67,7 @@ fn read_int_expr(expr: &mut &str) -> IntExpression {
                 paren_count -= 1;
 
                 if paren_count == 0 {
-                    *expr = &expr[1..]; 
+                    *expr = &expr[1..];
                     break;
                 }
             }
@@ -78,26 +75,40 @@ fn read_int_expr(expr: &mut &str) -> IntExpression {
             content.push(char);
             *expr = &expr[1..];
         }
-        IntExpression::SubExpr(content)
+        Some(Word::Paren(content))
     } else {
-        if expr.is_empty() {
-            IntExpression::Buffer("hi".to_string())
+        let word = expr.split_whitespace().next()?;
+        Some(Word::Simple(word))
+    }
+}
 
-        } else {
-            let Some(word) = expr.split_whitespace().next() else {
-                panic!("unexpected end of interpreted int (iint)");
-            };
+#[derive(Debug, PartialEq)]
+enum IntExpression {
+    Value(i32),
+    SubExpr(String),
+    Variable(String),
+}
 
-            *expr = &expr[word.len()..];
+impl IntExpression {
+    fn as_string(&self) -> String {
+        match self {
+            IntExpression::Value(int) => int.to_string(),
+            IntExpression::SubExpr(expr) => expr.to_string(),
+            IntExpression::Variable(var) => var.to_string(),
+        }
+    }
+}
 
-            if let Ok(int) = word.parse::<i32>() {
+fn read_int_expr(expr: Word<'_>) -> IntExpression {
+    match expr {
+        Word::Simple(expr) => {
+            if let Ok(int) = expr.trim().parse::<i32>() {
                 IntExpression::Value(int)
             } else {
-                IntExpression::Variable(word.to_string())
+                IntExpression::Variable(expr.trim().to_string())
             }
         }
-
-        
+        Word::Paren(expr) => IntExpression::SubExpr(expr),
     }
 }
 
@@ -107,6 +118,106 @@ fn parsei(
     biops: &HashMap<&str, OpDefinition>,
     unops: &HashMap<&str, OpDefinition>,
 ) -> i32 {
+    let part_1 = read_word(&mut val).expect("must have at least one word to parse");
+    let part_2 = read_word(&mut val);
+    let part_3 = read_word(&mut val);
+
+    match (part_2, part_3) {
+        (None, None) => match part_1 {
+            Word::Paren(expr) => {
+                panic!("expected single value or variable, found parenthesised expression {expr}")
+            }
+            Word::Simple(expr) => {
+                if let Ok(int) = expr.trim().parse::<i32>() {
+                    int
+                } else if let Some(x) = int_variables.get(expr) {
+                    *x
+                } else {
+                    panic!("unknown variable {expr}");
+                }
+            }
+        },
+        (Some(part_2), None) => {
+            let op = match part_1 {
+                Word::Paren(expr) => panic!("expected unary operator, found expression {expr}"),
+                Word::Simple(expr) => expr,
+            };
+
+            let x = match part_2 {
+                Word::Paren(expr) => parsei(&expr, int_variables, biops, unops),
+                Word::Simple(expr) => {
+                    if let Ok(int) = expr.trim().parse::<i32>() {
+                        int
+                    } else if let Some(x) = int_variables.get(expr) {
+                        *x
+                    } else {
+                        panic!("unknown variable {expr}");
+                    }
+                }
+            };
+
+            todo!()
+        }
+        (Some(part_2), Some(part_3)) => {
+            let a = match part_1 {
+                Word::Paren(expr) => parsei(&expr, int_variables, biops, unops),
+                Word::Simple(expr) => {
+                    if let Ok(int) = expr.trim().parse::<i32>() {
+                        int
+                    } else if let Some(x) = int_variables.get(expr) {
+                        *x
+                    } else {
+                        panic!("unknown variable {expr}");
+                    }
+                }
+            };
+
+            let op = match part_2 {
+                Word::Paren(expr) => panic!("expected unary operator, found expression {expr}"),
+                Word::Simple(expr) => expr,
+            };
+
+            let b = match part_3 {
+                Word::Paren(expr) => parsei(&expr, int_variables, biops, unops),
+                Word::Simple(expr) => {
+                    if let Ok(int) = expr.trim().parse::<i32>() {
+                        int
+                    } else if let Some(x) = int_variables.get(expr) {
+                        *x
+                    } else {
+                        panic!("unknown variable {expr}");
+                    }
+                }
+            };
+
+            match op {
+                "+" => a + b,
+                "-" => a - b,
+                "/" => a / b,
+                "*" => a * b,
+                op => {
+                    if let Some(biop) = biops.get(op) {
+                        let args: &[&str] = &biop.0;
+                        let mut function: Vec<Cow<str>> =
+                            biop.1.split_whitespace().map(Cow::Borrowed).collect();
+                        let inputted_ints: [i32; 2] = [a, b];
+                        for (index, item) in function.iter_mut().enumerate() {
+                            if let Some(args_index) = args.iter().position(|x| *x == item) {
+                                let val: i32 = inputted_ints[args_index];
+                                *item = Cow::Owned(inputted_ints[args_index].to_string());
+                            }
+                        }
+                        parsei(&vec_to_string(&function, " "), int_variables, biops, unops)
+                    } else {
+                        panic!("unknown operator {op}");
+                    }
+                }
+            }
+        }
+        _ => unreachable!(),
+    }
+
+    /*
     let left_expr = read_int_expr(&mut val);
 
     val = val.trim_start();
@@ -114,38 +225,41 @@ fn parsei(
         panic!("unexpected EOS");
     };
     val = &val[op.len()..];
-
     println!("val: {val}");
 
     let right_expr = read_int_expr(&mut val);
-
-    println!("{left_expr:?}");
 
     let a = match left_expr {
         IntExpression::SubExpr(sub) => parsei(&sub, int_variables, biops, unops),
         IntExpression::Value(int) => int,
         IntExpression::Variable(var) => {
-            if unops.contains_key(var.as_str()) {
-                println!("x: {var}");
-                3
+            if let Some(x) = int_variables.get(var.as_str()) {
+                *x
             } else {
-                println!("x: {var}");
-                *int_variables.get(var.as_str()).expect("left-hand side argument unexpected")
+                if unops.contains_key(var.as_str()) {
+                    println!("x: {var}");
+                    3
+                } else {
+                    3
+                }
             }
-        },
-        IntExpression::Buffer(word) => {
-            println!("hello world! {word}");
-            3
         }
     };
 
     let b = match right_expr {
         IntExpression::SubExpr(sub) => parsei(&sub, int_variables, biops, unops),
         IntExpression::Value(int) => int,
-        IntExpression::Variable(var) => *int_variables.get(var.as_str()).expect("right-hand side argument unexpected"),
-        IntExpression::Buffer(word) => {
-            println!("hello wolrd");
-            3
+        IntExpression::Variable(var) => {
+            if let Some(x) = int_variables.get(var.as_str()) {
+                *x
+            } else {
+                if unops.contains_key(var.as_str()) {
+                    println!("x: {var}");
+                    3
+                } else {
+                    3
+                }
+            }
         }
     };
 
@@ -172,6 +286,7 @@ fn parsei(
             }
         }
     }
+     */
 }
 
 fn main() {
@@ -289,7 +404,7 @@ fn main() {
                 }
             } else if vartype == "int" {
                 if let Ok(cleaned_val) = val.parse::<i32>() {
-                   panic!("variable of type int must be iparse, not raw integer");
+                    panic!("variable of type int must be iparse, not raw integer");
                 } else {
                     let out: i32 = parsei(val, &int_variables, &biops, &unops);
 
