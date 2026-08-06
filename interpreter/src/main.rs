@@ -58,6 +58,15 @@ enum IntExprResult {
     Invalid,
 }
 
+impl IntExprResult {
+    fn into_expr(self) -> Option<IntExpression> {
+        match self {
+            IntExprResult::Valid(expr) => Some(expr),
+            IntExprResult::Invalid => None,
+        }
+    }
+}
+
 fn read_int_expr(expr: &mut &str) -> IntExprResult {
     *expr = expr.trim_start();
 
@@ -75,7 +84,7 @@ fn read_int_expr(expr: &mut &str) -> IntExprResult {
                 paren_count -= 1;
 
                 if paren_count == 0 {
-                    *expr = &expr[1..]; 
+                    *expr = &expr[1..];
                     break;
                 }
             }
@@ -100,8 +109,6 @@ fn read_int_expr(expr: &mut &str) -> IntExprResult {
         } else {
             IntExprResult::Invalid
         }
-
-        
     }
 }
 
@@ -114,46 +121,69 @@ fn parsei(
     let left_expr = read_int_expr(&mut val);
     let og_left_expr = left_expr.clone();
 
+    let Some(cleaned_left_expr) = og_left_expr.clone().into_expr() else {
+        panic!("left expr evaluated incorrectly");
+    };
+
+    println!("{left_expr:?}");
+
     val = val.trim_start();
     let Some(op) = val.split_whitespace().next() else {
         panic!("unexpected EOS");
     };
     val = &val[op.len()..];
 
-    println!("val: {val}");
+    let after = &val[val
+        .char_indices()
+        .find_map(|(i, c)| c.is_whitespace().then_some(i + c.len_utf8()))
+        .unwrap_or_default()..];
+
+    if let IntExpression::Variable(var) = cleaned_left_expr {
+        if let Some(unop) = unops.get(var.as_str()) {
+            let mut split: Vec<&str> = unop.1.split_whitespace().collect();
+
+            for (index, item) in split.iter_mut().enumerate() {
+                if item == &unop.0[0] {
+                    *item = op;
+                }
+            }
+
+            println!("asdfasdfasdfasdf {:?}", after);
+        } else {
+            panic!("unop {var} does not exist");
+        }
+    }
 
     let right_expr = read_int_expr(&mut val);
     let og_right_expr = right_expr.clone();
 
-    println!("{left_expr:?}");
-
     let a = match left_expr {
-        IntExprResult::Valid(IntExpression::SubExpr(sub)) => parsei(&sub, int_variables, biops, unops),
+        IntExprResult::Valid(IntExpression::SubExpr(sub)) => {
+            parsei(&sub, int_variables, biops, unops)
+        }
         IntExprResult::Valid(IntExpression::Value(int)) => int,
-        IntExprResult::Valid(IntExpression::Variable(var)) => match int_variables.get(var.as_str()) {
-            Some(x) => {
-                println!("dfasdf: {x}");
-                3
-            },
+        IntExprResult::Valid(IntExpression::Variable(var)) => match int_variables.get(var.as_str())
+        {
+            Some(x) => 3,
             None => {
                 let varname = var.as_str();
-                if unops.contains_key(varname) {
-                    println!("is a unop!"); 
-                }
-                3
-            },
+                let final_out = 3;
+                //  {}
+                final_out
+            }
         },
-        IntExprResult::Invalid => todo!()
+        IntExprResult::Invalid => panic!("unknown left-hand side operator {og_left_expr:?}"),
     };
 
     let b = match right_expr {
-        IntExprResult::Valid(IntExpression::SubExpr(sub)) => parsei(&sub, int_variables, biops, unops),
-        IntExprResult::Valid(IntExpression::Value(int)) => int,
-        IntExprResult::Valid(IntExpression::Variable(var)) => *int_variables.get(var.as_str()).expect("right-hand side argument unexpected"),
-        IntExprResult::Invalid => {
-            println!("hi, {val:?}");
-            todo!()
+        IntExprResult::Valid(IntExpression::SubExpr(sub)) => {
+            parsei(&sub, int_variables, biops, unops)
         }
+        IntExprResult::Valid(IntExpression::Value(int)) => int,
+        IntExprResult::Valid(IntExpression::Variable(var)) => *int_variables
+            .get(var.as_str())
+            .expect("right-hand side argument unexpected"),
+        IntExprResult::Invalid => i32::MIN,
     };
 
     match op {
@@ -173,9 +203,44 @@ fn parsei(
                         *item = Cow::Owned(inputted_ints[args_index].to_string());
                     }
                 }
+                println!("hello! {:?}", vec_to_string(&function, " "));
                 parsei(&vec_to_string(&function, " "), int_variables, biops, unops)
             } else {
-                panic!("what? {og_left_expr:?}, {b}");
+                if b == i32::MIN {
+                    let unop_name = og_left_expr.into_expr();
+                    // Some(Variable("negate")) 1
+                    match unop_name {
+                        Some(x) => match x {
+                            IntExpression::SubExpr(x) => unimplemented!(),
+                            IntExpression::Variable(x) => {
+                                if let Some(unop_value) = unops.get(x.as_str()) {
+                                    let varname = &unop_value.0[0];
+                                    let mut var_content: Vec<&str> =
+                                        unop_value.1.split_whitespace().collect();
+
+                                    for (index, item) in var_content.iter_mut().enumerate() {
+                                        if item == varname {
+                                            *item = op;
+                                        }
+                                    }
+
+                                    parsei(
+                                        &vec_to_string(&var_content, " "),
+                                        int_variables,
+                                        biops,
+                                        unops,
+                                    )
+                                } else {
+                                    panic!("could not find unop {x}")
+                                }
+                            }
+                            IntExpression::Value(x) => unimplemented!(),
+                        },
+                        None => panic!("no!"),
+                    }
+                } else {
+                    panic!("b should be {}, instead found {b}", i32::MIN);
+                }
             }
         }
     }
@@ -296,14 +361,14 @@ fn main() {
                 }
             } else if vartype == "int" {
                 if let Ok(cleaned_val) = val.parse::<i32>() {
-                   panic!("variable of type int must be iparse, not raw integer");
+                    panic!("variable of type int must be iparse, not raw integer");
                 } else {
                     let out: i32 = parsei(val, &int_variables, &biops, &unops);
 
                     int_variables.insert(name, out);
                 }
             } else {
-                if vartype.contains("biop") {
+                if vartype.contains("biop") || vartype.contains("unop") {
                     let op_type: &str = clean_split(clean_split(vartype, " -> ")[0], " ")[0];
                     let args: Vec<&str> = clean_split(
                         clean_split(clean_split(vartype, " -> ")[0], "(")[1]

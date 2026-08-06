@@ -1,5 +1,7 @@
-negate: unop (x) = (1 - 1) - x
+double: unop (x) = 2 * x
 
-x: int = negate 1
+five: int = ((1 + 1) + 1) + (1 + 1)
 
-print x
+ten: int = double ((double five) + (1 + 1))
+
+print ten
